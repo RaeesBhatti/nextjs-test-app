@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function Home() {
     const date = await getDate();
-    const headersList = headers()
+    const headersList = await headers()
     const hostname = headersList.get('host')
 
     return (
