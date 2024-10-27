@@ -5,6 +5,9 @@ const agent = new Agent({
   keepAlive: true,
 });
 
+const EnvTildaDeploymentId = process.env.TILDA_DEPLOYMENT_ID;
+const EnvTildaCacheApiBaseUrl = process.env.TILDA_CACHE_API_BASE_URL;
+
 module.exports = class CacheHandler {
   constructor(options) {
     this.options = options;
@@ -13,11 +16,13 @@ module.exports = class CacheHandler {
   async get(key) {
     console.log("CacheHandler.get", key);
     // This could be stored anywhere, like durable storage
-    const cacheUrl = new URL("http://127.0.0.1:1337/v1/cache");
-    cacheUrl.searchParams.set("key", key);
-    const response = await fetch(cacheUrl.toString(), {
+    const cacheUrl = `${EnvTildaCacheApiBaseUrl}?key=${encodeURIComponent(key)}`;
+    const response = await fetch(cacheUrl, {
       cache: "no-store",
       agent: agent,
+      headers: {
+        Authorization: EnvTildaDeploymentId,
+      },
     });
     if (!response.ok) {
       console.warn("CacheHandler.get", "Cache miss", key);
@@ -25,22 +30,47 @@ module.exports = class CacheHandler {
     }
 
     const cachedItem = await response.json();
-    return { value: cachedItem.value.json, tags: cachedItem.tags, lastModified: cachedItem.lastModifiedAtEpochMs };
+
+    const body =
+      Array.isArray(cachedItem.value?.body?.data) && cachedItem.value?.body?.type === "Buffer"
+        ? Buffer.from(cachedItem.value.body.data)
+        : cachedItem.value.body?.type === "BufferBase64"
+          ? Buffer.from(cachedItem.value.body.data, "base64")
+          : cachedItem.value.body;
+
+    return { value: { ...cachedItem.value, body: body }, tags: cachedItem.tags, lastModified: cachedItem.lastModifiedAtEpochMs };
   }
 
   async set(key, data, ctx) {
-    console.log("CacheHandler.set key:", key);
-    console.log("CacheHandler.set data:", data);
-    console.log("CacheHandler.set ctx:", ctx);
+    const cacheUrl = `${EnvTildaCacheApiBaseUrl}?key=${encodeURIComponent(key)}`;
 
-    const cacheUrl = new URL("http://127.0.0.1:1337/v1/cache");
+    const payload = JSON.stringify(
+      {
+        key,
+        value: data,
+        tags: ctx.tags || [],
+        expiresInSeconds: ctx.revalidate || 0,
+        kind: data.kind === "ROUTE" ? "httpResponse" : "json",
+      },
+      (key, value) => {
+        if (value?.type === "Buffer" && Array.isArray(value?.data)) {
+          value.data = Buffer.from(value.data).toString("base64");
+          value.type = "BufferBase64";
+        }
 
-    const response = await fetch(cacheUrl.toString(), {
+        return value;
+      },
+    );
+
+    console.log("CacheHandler.set payload:", payload);
+
+    const response = await fetch(cacheUrl, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
+        Authorization: EnvTildaDeploymentId,
       },
-      body: JSON.stringify({ key, value: { json: data }, tags: ctx.tags, expiresInSeconds: ctx.revalidate || 0 }),
+      body: payload,
       cache: "no-store",
       agent: agent,
     });
@@ -69,12 +99,13 @@ module.exports = class CacheHandler {
       return;
     }
 
-    const cacheUrl = new URL("http://127.0.0.1:1337/v1/cache");
+    const cacheUrl = `${EnvTildaCacheApiBaseUrl}?key=${encodeURIComponent(key)}`;
 
-    const response = await fetch(cacheUrl.toString(), {
+    const response = await fetch(cacheUrl, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
+        Authorization: EnvTildaDeploymentId,
       },
       body: JSON.stringify({ tags: tags }),
       cache: "no-store",

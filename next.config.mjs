@@ -5,7 +5,7 @@ const nextConfig = {
   output: "standalone",
   cleanDistDir: true,
   experimental: {},
-  cacheHandler: path.resolve("./cache-handler.js"),
+  // cacheHandler: path.resolve("./cache-handler.js"),
   experimental: {
     swrDelta: 60 * 60 * 24, // 1 day
   },
