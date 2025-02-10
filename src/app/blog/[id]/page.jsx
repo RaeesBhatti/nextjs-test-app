@@ -17,7 +17,8 @@ export async function generateStaticParams() {
 export default async function Page(props) {
   const params = await props.params;
   const post = await fetch(`https://api.vercel.app/blog/${params.id}`, {
-    next: { tags: [`blog${params.id}`], revalidated: 60 },
+    next: { tags: [`blog${params.id}`], revalidate: 60 },
+    cache: "force-cache",
   }).then((res) => res.json());
   return (
     <main>
