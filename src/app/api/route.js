@@ -1,7 +1,11 @@
-import { revalidateTag } from "next/cache";
+import { revalidateTag, revalidatePath } from "next/cache";
 
 export async function GET(request) {
-  revalidateTag("ding");
+  const url = new URL(request.url);
+  const purgeTag = url.searchParams.get("purgeTag");
+  if (purgeTag) {
+    revalidateTag(purgeTag);
+  }
 
   return new Response(
     JSON.stringify({
@@ -13,8 +17,9 @@ export async function GET(request) {
     {
       status: 200,
       headers: {
-        "Edge-Cache-Control": `max-age=15`,
-        "Edge-Cache-Tags": `ding dong`,
+        "Tilda-Cache-Tags": "ding dong",
+        // "Tilda-Cache-Control": "max-age=30",
+        "Cache-Control": "max-age=0, stale-while-revalidate",
       },
     },
   );
